@@ -12,6 +12,7 @@ ACME_BIN_PATH=${BASE_ROOT}/acme.sh
 TEMP_PATH=${BASE_ROOT}/temp
 CRT_PATH_NAME=`cat ${CRT_BASE_PATH}/_archive/DEFAULT`
 CRT_PATH=${CRT_BASE_PATH}/_archive/${CRT_PATH_NAME}
+CRT_SYSDEFAULT_PATH=${CRT_BASE_PATH}/_archive/system/default
 
 backupCrt () {
   echo 'begin backupCrt'
@@ -25,20 +26,25 @@ backupCrt () {
 }
 
 installAcme () {
+  force="${1:-no}"
   echo 'begin installAcme'
-  mkdir -p ${TEMP_PATH}
-  cd ${TEMP_PATH}
-  echo 'begin downloading acme.sh tool...'
-  ACME_SH_ADDRESS=`curl -L https://raw.githubusercontent.com/andyzhshg/syno-acme/master/acme.sh.address`
-  SRC_TAR_NAME=acme.sh.tar.gz
-  curl -L -o ${SRC_TAR_NAME} ${ACME_SH_ADDRESS}
-  SRC_NAME=`tar -tzf ${SRC_TAR_NAME} | head -1 | cut -f1 -d"/"`
-  tar zxvf ${SRC_TAR_NAME}
-  echo 'begin installing acme.sh tool...'
-  cd ${SRC_NAME}
-  ./acme.sh --install --nocron --home ${ACME_BIN_PATH}
-  echo 'done installAcme'
-  rm -rf ${TEMP_PATH}
+  if [ -d $ACME_BIN_PATH ] && [ x$force != x"no" ];then
+    echo 'using exists installAcme'
+else
+    mkdir -p ${TEMP_PATH}
+    cd ${TEMP_PATH}
+    echo 'begin downloading acme.sh tool...'
+    ACME_SH_ADDRESS=`cat $BASE_ROOT/acme.sh.address`
+    SRC_TAR_NAME=acme.sh.tar.gz
+    curl -L -o ${SRC_TAR_NAME} ${ACME_SH_ADDRESS}
+    SRC_NAME=`tar -tzf ${SRC_TAR_NAME} | head -1 | cut -f1 -d"/"`
+    tar zxvf ${SRC_TAR_NAME}
+    echo 'begin installing acme.sh tool...'
+    cd ${SRC_NAME}
+    ./acme.sh --install --nocron --home ${ACME_BIN_PATH}
+    echo 'done installAcme'
+    rm -rf ${TEMP_PATH}
+  fi
   return 0
 }
 
@@ -49,10 +55,14 @@ generateCrt () {
   echo 'begin updating default cert by acme.sh tool'
   source ${ACME_BIN_PATH}/acme.sh.env
   ${ACME_BIN_PATH}/acme.sh --force --log --issue --dns ${DNS} --dnssleep ${DNS_SLEEP} -d "${DOMAIN}" -d "*.${DOMAIN}"
-  ${ACME_BIN_PATH}/acme.sh --installcert -d ${DOMAIN} -d *.${DOMAIN} \
+  ${ACME_BIN_PATH}/acme.sh --force --installcert -d "${DOMAIN}" -d "*.${DOMAIN}" \
     --certpath ${CRT_PATH}/cert.pem \
     --key-file ${CRT_PATH}/privkey.pem \
+    --ca-file ${CRT_PATH}/chain.pem \
     --fullchain-file ${CRT_PATH}/fullchain.pem
+
+  # Copying to system default
+  cp -av ${CRT_PATH}/* $CRT_SYSDEFAULT_PATH/
 
   if [ -s "${CRT_PATH}/cert.pem" ]; then
     echo 'done generateCrt'
@@ -80,7 +90,7 @@ reloadWebService () {
   stop pkg-apache22
   start pkg-apache22
   reload pkg-apache22
-  echo 'done reloadWebService'  
+  echo 'done reloadWebService'
 }
 
 revertCrt () {

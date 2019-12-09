@@ -10,6 +10,7 @@ import os
 CERT_FILES = [
     'cert.pem',
     'privkey.pem',
+    'chain.pem',
     'fullchain.pem'
 ]
 
